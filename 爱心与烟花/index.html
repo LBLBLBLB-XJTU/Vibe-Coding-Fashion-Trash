@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>爱心与烟花</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#070518;overflow:hidden;display:flex;justify-content:center;align-items:center;height:100vh;user-select:none}
+canvas{display:block;position:fixed;top:0;left:0}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+let W,H,CX,CY,S;
+
+function resize(){
+  c.width=W=window.innerWidth;
+  c.height=H=window.innerHeight;
+  CX=W/2;CY=H/2;
+  S=Math.min(W,H)/34;
+  genHeart();
+}
+window.addEventListener('resize',resize);
+
+// ========== 心形路径 ==========
+const heart=[];
+function genHeart(){
+  heart.length=0;
+  const n=400;
+  for(let i=0;i<=n;i++){
+    const t=i/n*Math.PI*2;
+    const x=16*Math.sin(t)**3;
+    const y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+    heart.push({x:CX+x*S,y:CY-y*S});
+  }
+}
+
+// ========== 星空 ==========
+const stars=[];
+function initStars(){
+  stars.length=0;
+  for(let i=250;i--;)stars.push({
+    x:Math.random()*W,y:Math.random()*H,
+    r:Math.random()*1.8+.3,
+    ph:Math.random()*Math.PI*2,sp:Math.random()*.03+.01
+  });
+}
+function drawStars(t){
+  for(const s of stars){
+    const a=.3+.7*(.5+.5*Math.sin(t*s.sp+s.ph));
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${a})`;
+    ctx.fill();
+  }
+}
+
+// ========== 烟花粒子 ==========
+const particles=[];
+
+class Particle{
+  constructor(x,y,r,g,b,sz,spd,grav){
+    this.x=x;this.y=y;
+    this.r=r;this.g=g;this.b=b;
+    this.sz=sz||Math.random()*2.6+1;
+    const a=Math.random()*Math.PI*2,s=spd||Math.random()*5.5+1.5;
+    this.vx=Math.cos(a)*s;this.vy=Math.sin(a)*s;
+    this.al=1;this.dc=Math.random()*.012+.004;
+    this.gv=grav||.035;this.dr=.985;
+    this.tr=[];this.mt=Math.floor(Math.random()*5+3);
+  }
+  upd(){
+    this.tr.push({x:this.x,y:this.y});
+    if(this.tr.length>this.mt)this.tr.shift();
+    this.vx*=this.dr;this.vy*=this.dr;this.vy+=this.gv;
+    this.x+=this.vx;this.y+=this.vy;
+    this.al-=this.dc;
+  }
+  draw(){
+    if(this.al<=0)return;
+    const a=this.al,ix=this.x,iy=this.y;
+    // trail
+    for(let i=0;i<this.tr.length;i++){
+      const r=i/this.tr.length,aa=r*a*.35,ts=this.sz*.4*(r+.2);
+      ctx.beginPath();
+      ctx.arc(this.tr[i].x,this.tr[i].y,ts,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${this.r},${this.g},${this.b},${aa})`;
+      ctx.fill();
+    }
+    // glow
+    const gr=Math.max(1,this.sz*3);
+    const gd=ctx.createRadialGradient(ix,iy,0,ix,iy,gr);
+    gd.addColorStop(0,`rgba(${this.r},${this.g},${this.b},${a*.5})`);
+    gd.addColorStop(1,`rgba(${this.r},${this.g},${this.b},0)`);
+    ctx.beginPath();ctx.arc(ix,iy,gr,0,Math.PI*2);
+    ctx.fillStyle=gd;ctx.fill();
+    // core
+    ctx.beginPath();ctx.arc(ix,iy,this.sz,0,Math.PI*2);
+    ctx.fillStyle=`rgba(${this.r},${this.g},${this.b},${a})`;
+    ctx.fill();
+    // highlight
+    ctx.beginPath();ctx.arc(ix-1,iy-1,this.sz*.4,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${a*.6})`;
+    ctx.fill();
+  }
+  get dead(){return this.al<=0}
+}
+
+// ========== 写实烟花配色 ==========
+const PALETTES=[
+  [[255,190,40],[255,210,70],[255,160,20],[255,240,150]],          // 暖金
+  [[255,110,100],[255,140,130],[255,80,70],[255,190,170]],         // 珊瑚粉
+  [[230,40,70],[210,30,55],[250,60,90],[255,130,150]],             // 玫瑰红
+  [[230,160,220],[210,140,210],[250,180,240],[255,210,250]],       // 淡紫粉
+  [[255,250,240],[240,235,255],[255,255,255],[230,225,245]],       // 暖白
+  [[70,140,255],[50,120,240],[100,160,255],[180,215,255]],         // 宝蓝
+  [[40,210,110],[25,190,95],[70,230,130],[170,255,220]],           // 翡翠
+  [[255,160,50],[255,140,30],[255,180,70],[255,220,150]],          // 琥珀
+];
+
+function createFirework(bx,by,pi){
+  const colors=PALETTES[pi??Math.floor(Math.random()*PALETTES.length)];
+  const c1=colors[Math.floor(Math.random()*colors.length)];
+  const c2=colors[Math.floor(Math.random()*colors.length)];
+  // 主爆点
+  for(let i=120;i--;){
+    const c=Math.random()>.5?c1:c2;
+    const spd=Math.random()*6+1.5,sz=Math.random()*2.3+1;
+    const p=new Particle(bx,by,c[0],c[1],c[2],sz,spd,.03);
+    p.dr=.980;p.dc=Math.random()*.01+.004;
+    particles.push(p);
+  }
+  // 闪烁尾迹
+  for(let i=50;i--;){
+    const c=Math.random()>.5?c1:c2;
+    const bc=Math.min(255,c[0]*1.3),gc=Math.min(255,c[1]*1.3),rc=Math.min(255,c[2]*1.3);
+    const p=new Particle(bx,by,bc,gc,rc,1,Math.random()*7+5,.02);
+    p.dr=.965;p.dc=Math.random()*.02+.015;p.mt=12;
+    particles.push(p);
+  }
+  // 金色垂柳
+  for(let i=30;i--;){
+    const p=new Particle(bx,by,255,200,100,2.8,Math.random()*2.7+.8,.07);
+    p.dr=.995;p.dc=Math.random()*.003+.002;p.mt=20;
+    particles.push(p);
+  }
+  // 白色噼啪火星
+  for(let i=20;i--;){
+    const p=new Particle(bx,by,255,255,255,1,Math.random()*7+4,.025);
+    p.dr=.960;p.dc=Math.random()*.025+.020;
+    particles.push(p);
+  }
+}
+
+// ========== 心形绘制（优雅线稿） ==========
+function drawOutline(prog){
+  if(prog<=0)return;
+  const idx=Math.floor(prog),frac=prog-idx,end=Math.min(idx,heart.length-1);
+  if(end<1)return;
+  const pts=[];
+  for(let i=0;i<=end;i++)pts.push(heart[i]);
+  if(idx<heart.length-1&&frac>0){
+    const p1=heart[idx],p2=heart[idx+1];
+    pts.push({x:p1.x+(p2.x-p1.x)*frac,y:p1.y+(p2.y-p1.y)*frac});
+  }
+  if(pts.length<2)return;
+
+  // 大气柔光
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.strokeStyle='rgba(190,130,140,.06)';ctx.lineWidth=30;
+  ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke();
+
+  // 主线 - 哑光玫瑰色
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.strokeStyle='#c47a7f';ctx.lineWidth=2.2;ctx.stroke();
+
+  // 笔尖 - 温润光点
+  const tip=pts[pts.length-1];
+  const gd=ctx.createRadialGradient(tip.x,tip.y,0,tip.x,tip.y,16);
+  gd.addColorStop(0,'rgba(230,205,195,.75)');
+  gd.addColorStop(.5,'rgba(210,175,165,.2)');
+  gd.addColorStop(1,'rgba(190,130,140,0)');
+  ctx.beginPath();ctx.arc(tip.x,tip.y,16,0,Math.PI*2);
+  ctx.fillStyle=gd;ctx.fill();
+  ctx.beginPath();ctx.arc(tip.x,tip.y,3,0,Math.PI*2);
+  ctx.fillStyle='rgba(245,235,230,.85)';ctx.fill();
+  ctx.beginPath();ctx.arc(tip.x,tip.y,1.2,0,Math.PI*2);
+  ctx.fillStyle='#fff';ctx.fill();
+}
+
+// ========== 心形填充（温润玉质） ==========
+function drawHeart(t,fillAlpha){
+  if(heart.length<3)return;
+  if(fillAlpha==null)fillAlpha=1;
+  const pulse=.5+.35*Math.sin(t*2.8);
+  const fa=Math.max(0,Math.min(1,fillAlpha));
+
+  // 构建路径
+  ctx.beginPath();ctx.moveTo(heart[0].x,heart[0].y);
+  for(let i=1;i<heart.length;i++)ctx.lineTo(heart[i].x,heart[i].y);
+  ctx.closePath();
+
+  // 底层 - 酒红底色（随时间慢慢加深）
+  ctx.fillStyle=`rgba(50,8,18,${.55*fa})`;ctx.fill();
+
+  // 中层 - 暖玫瑰色晕染（从心形中心偏下散发）
+  const gd1=ctx.createRadialGradient(CX,CY+3*S,0,CX,CY+3*S,13*S);
+  gd1.addColorStop(0,`rgba(170,95,105,${.42*fa})`);
+  gd1.addColorStop(.5,`rgba(140,75,85,${.28*fa})`);
+  gd1.addColorStop(1,`rgba(100,50,60,0)`);
+  ctx.fillStyle=gd1;ctx.fill();
+
+  // 上层 - 暖光透入（从上方洒落）
+  const gd2=ctx.createRadialGradient(CX,CY-7*S,0,CX,CY-7*S,9*S);
+  gd2.addColorStop(0,`rgba(210,180,165,${.35*fa})`);
+  gd2.addColorStop(.6,`rgba(195,160,150,${.20*fa})`);
+  gd2.addColorStop(1,`rgba(180,140,130,0)`);
+  ctx.fillStyle=gd2;ctx.fill();
+
+  // 流光 - 一抹暖光缓缓掠过表面
+  const sx=CX+Math.sin(t*.5)*7*S;
+  const sy=CY-2*S+Math.cos(t*.4)*5*S;
+  const gd3=ctx.createRadialGradient(sx,sy,0,sx,sy,4*S);
+  gd3.addColorStop(0,`rgba(225,205,195,${.22*fa})`);
+  gd3.addColorStop(1,`rgba(225,205,195,0)`);
+  ctx.fillStyle=gd3;ctx.fill();
+
+  // 脉动 - 微弱的光晕起伏
+  ctx.strokeStyle=`rgba(170,110,120,${.18*pulse})`;
+  ctx.lineWidth=10;ctx.stroke();
+
+  // 边线
+  ctx.strokeStyle=`rgba(190,140,145,${.20+.25*fa})`;
+  ctx.lineWidth=1.2;ctx.stroke();
+}
+
+// ========== 环境光晕（温润暖光） ==========
+const floaters=[],sparkles=[];
+
+function initAmbient(){
+  floaters.length=0;sparkles.length=0;
+  for(let i=8;i--;)floaters.push({
+    x:CX+(Math.random()-.5)*14*S,
+    y:CY-4*S+(Math.random()-.5)*10*S,
+    r:Math.random()*4+2,
+    ph:Math.random()*Math.PI*2,
+    sp:Math.random()*.7+.3,
+  });
+  for(let i=25;i--;)sparkles.push({
+    x:CX+(Math.random()-.5)*16*S,
+    y:CY-3*S+(Math.random()-.5)*12*S,
+    ph:Math.random()*Math.PI*2,
+    sp:Math.random()*1.5+1,
+    sz:Math.random()*1.5+1,
+    br:Math.random()*.5+.3,
+  });
+}
+
+function drawAmbient(t){
+  for(const f of floaters){
+    const fx=f.x+Math.sin(t*.3+f.ph)*20;
+    const fy=f.y+Math.cos(t*.2+f.ph)*15;
+    const a=.12+.1*Math.sin(t*f.sp+f.ph);
+    const gd=ctx.createRadialGradient(fx,fy,0,fx,fy,f.r*4);
+    gd.addColorStop(0,`rgba(210,180,170,${a*.2})`);
+    gd.addColorStop(1,`rgba(210,180,170,0)`);
+    ctx.beginPath();ctx.arc(fx,fy,f.r*4,0,Math.PI*2);
+    ctx.fillStyle=gd;ctx.fill();
+    ctx.beginPath();ctx.arc(fx,fy,f.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(220,195,185,${a})`;
+    ctx.fill();
+  }
+  for(const s of sparkles){
+    const a=.3+.7*(.5+.5*Math.sin(t*s.sp+s.ph));
+    const al=a*s.br;
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.sz+1,0,Math.PI*2);
+    ctx.fillStyle=`rgba(230,215,210,${al})`;
+    ctx.fill();
+  }
+}
+
+// ========== 背景散景（虚化光斑） ==========
+const bokeh=[];
+function initBokeh(){
+  bokeh.length=0;
+  const cols=[[255,205,185],[255,225,205],[235,200,190],[210,185,175]];
+  for(let i=20;i--;)bokeh.push({
+    x:Math.random()*W,y:Math.random()*H,
+    r:Math.random()*70+25,
+    ph:Math.random()*Math.PI*2,
+    sp:Math.random()*.025+.005,
+    dx:(Math.random()-.5)*.12,
+    dy:(Math.random()-.5)*.12,
+    col:cols[Math.floor(Math.random()*cols.length)],
+  });
+}
+function drawBokeh(t){
+  for(const b of bokeh){
+    const x=b.x+Math.sin(t*b.sp*1.3+b.ph)*35;
+    const y=b.y+Math.cos(t*b.sp+b.ph)*25;
+    const a=.025+.02*Math.sin(t*b.sp*2+b.ph*1.5);
+    const gd=ctx.createRadialGradient(x,y,0,x,y,b.r);
+    gd.addColorStop(0,`rgba(${b.col[0]},${b.col[1]},${b.col[2]},${a})`);
+    gd.addColorStop(1,`rgba(${b.col[0]},${b.col[1]},${b.col[2]},0)`);
+    ctx.beginPath();ctx.arc(x,y,b.r,0,Math.PI*2);
+    ctx.fillStyle=gd;ctx.fill();
+  }
+}
+
+// ========== 画笔金粉拖尾 ==========
+const trailDust=[];
+function addTrailDust(x,y){
+  for(let i=2;i--;){
+    const a=Math.random()*Math.PI*2;
+    const spd=Math.random()*.3+.1;
+    trailDust.push({
+      x:x+(Math.random()-.5)*2,
+      y:y+(Math.random()-.5)*2,
+      vx:Math.cos(a)*spd,
+      vy:Math.sin(a)*spd-.15,
+      life:1,dc:Math.random()*.035+.02,
+      sz:Math.random()*1.8+.8,
+    });
+  }
+}
+function drawTrailDust(){
+  for(let i=trailDust.length-1;i>=0;i--){
+    const s=trailDust[i];
+    s.x+=s.vx;s.y+=s.vy;s.life-=s.dc;
+    if(s.life<=0){trailDust.splice(i,1);continue;}
+    ctx.beginPath();ctx.arc(s.x,s.y,s.sz,0,Math.PI*2);
+    ctx.fillStyle=`rgba(235,215,205,${s.life*.6})`;
+    ctx.fill();
+  }
+}
+
+// ========== 上升暖烬 ==========
+const embers=[];
+function spawnEmbers(cnt){
+  for(let i=cnt||1;i--;){
+    const angle=Math.random()*Math.PI*2;
+    const dist=Math.random()*9*S;
+    const x=CX+Math.cos(angle)*dist*.5;
+    const y=CY-3*S+Math.sin(angle)*dist*.3;
+    embers.push({
+      x,y,vx:(Math.random()-.5)*.12,
+      vy:-(Math.random()*.35+.08),
+      life:1,dc:Math.random()*.008+.004,
+      sz:Math.random()*2+1.5,
+      ph:Math.random()*Math.PI*2,
+    });
+  }
+}
+function drawEmbers(){
+  for(let i=embers.length-1;i>=0;i--){
+    const s=embers[i];
+    s.x+=s.vx+Math.sin(s.ph)*.02;
+    s.y+=s.vy;s.life-=s.dc;
+    if(s.life<=0){embers.splice(i,1);continue;}
+    const a=s.life*.35;
+    const gr=Math.max(2,s.sz*4);
+    const gd=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,gr);
+    gd.addColorStop(0,`rgba(225,200,190,${a*.35})`);
+    gd.addColorStop(1,`rgba(225,200,190,0)`);
+    ctx.beginPath();ctx.arc(s.x,s.y,gr,0,Math.PI*2);
+    ctx.fillStyle=gd;ctx.fill();
+    ctx.beginPath();ctx.arc(s.x,s.y,s.sz,0,Math.PI*2);
+    ctx.fillStyle=`rgba(240,220,210,${a*.5})`;
+    ctx.fill();
+  }
+}
+
+// ========== 柔光射线 ==========
+function drawRays(t,fa){
+  if(fa<=0)return;
+  const n=7,alpha=.04*fa;
+  for(let i=0;i<n;i++){
+    const angle=i/n*Math.PI*2+t*.04;
+    const len=Math.max(W,H)*.6;
+    const gd=ctx.createRadialGradient(CX,CY,0,CX,CY,len);
+    gd.addColorStop(0,`rgba(220,195,185,${alpha})`);
+    gd.addColorStop(.3,`rgba(220,195,185,${alpha*.4})`);
+    gd.addColorStop(1,`rgba(220,195,185,0)`);
+    ctx.beginPath();
+    ctx.moveTo(CX,CY);
+    ctx.lineTo(CX+Math.cos(angle-.06)*len,CY+Math.sin(angle-.06)*len);
+    ctx.lineTo(CX+Math.cos(angle+.06)*len,CY+Math.sin(angle+.06)*len);
+    ctx.closePath();
+    ctx.fillStyle=gd;ctx.fill();
+  }
+}
+
+// ========== 暗角 ==========
+function drawVignette(fa){
+  if(fa<=0)return;
+  const gd=ctx.createRadialGradient(CX,CY,Math.min(W,H)*.25,CX,CY,Math.max(W,H)*.7);
+  gd.addColorStop(0,'rgba(0,0,0,0)');
+  gd.addColorStop(1,`rgba(0,0,0,${.35*fa})`);
+  ctx.fillStyle=gd;ctx.fillRect(0,0,W,H);
+}
+
+// ========== 背景渐变 ==========
+function drawBg(){
+  for(let y=0;y<H;y++){
+    const t=y/H;
+    ctx.fillStyle=`rgb(${6+t*6},${3+t*6},${14+t*18})`;
+    ctx.fillRect(0,y,W,1);
+  }
+}
+
+// ========== 预热画面 ==========
+const preFloaters=[];
+function initPre(){
+  preFloaters.length=0;
+  for(let i=12;i--;)preFloaters.push({
+    x:Math.random()*W,y:Math.random()*H,
+    r:Math.random()*30+10,
+    ph:Math.random()*Math.PI*2,
+    sp:Math.random()*.8+.2,
+  });
+}
+function drawPre(t){
+  drawBg();drawStars(t);
+  for(const f of preFloaters){
+    const a=.03+.03*Math.sin(t*f.sp+f.ph);
+    const gd=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r);
+    gd.addColorStop(0,`rgba(210,175,165,${a})`);
+    gd.addColorStop(1,`rgba(210,175,165,0)`);
+    ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,Math.PI*2);
+    ctx.fillStyle=gd;ctx.fill();
+  }
+  // 温馨文字
+  const txt='❤';
+  ctx.font=`${Math.min(W,H)*.06}px serif`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=`rgba(196,122,127,${.12+.08*Math.sin(t*2)})`;
+  ctx.fillText(txt,CX,CY);
+}
+
+// ========== 主循环 ==========
+let state='pre',progress=0;
+let hbStart=0,fwStart=0,burst=0;
+let heartDoneTime=0;
+const MAX_BURST=8;
+
+resize();initStars();initAmbient();initBokeh();initPre();
+
+function loop(t){
+  t/=1000;
+  ctx.clearRect(0,0,W,H);
+
+  if(state==='pre'){
+    drawPre(t);
+    // 3 秒后开始
+    if(t>3){state='drawing';progress=0;}
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  // 正常星空背景
+  drawBg();drawStars(t);drawBokeh(t);
+
+  if(state==='drawing'){
+    progress=Math.min(progress+2.2,heart.length-1);
+    drawOutline(progress);
+    // 画笔金粉拖尾
+    const idx=Math.min(Math.floor(progress),heart.length-1);
+    if(idx>0&&idx<heart.length){addTrailDust(heart[idx].x,heart[idx].y);}
+    drawTrailDust();
+    drawVignette(.08);
+    if(progress>=heart.length-1){
+      state='heartbeat';
+      hbStart=t;
+    }
+  }
+  else if(state==='heartbeat'){
+    const el=t-hbStart;
+    const fa=Math.min(1,el/4);
+    drawHeart(t,fa);drawAmbient(t);
+    drawRays(t,fa);drawVignette(.2+.15*fa);
+    spawnEmbers(2);drawEmbers();
+    if(el>2.5){
+      state='fireworks';
+      fwStart=t;
+      createFirework(CX,CY-7*S,0);
+      burst=1;
+    }
+  }
+  else if(state==='fireworks'){
+    const fa=Math.min(1,(t-hbStart)/4);
+    drawHeart(t,fa);drawAmbient(t);
+    drawRays(t,fa);drawVignette(.35);
+    spawnEmbers(1);drawEmbers();
+    if(burst<MAX_BURST){
+      const el=t-fwStart;
+      const iv=.85+Math.random()*.3;
+      if(el>burst*iv){
+        const ox=(Math.random()-.5)*16*S*.6;
+        const oy=-(Math.random()*22*S*.4+22*S*.3);
+        createFirework(CX+ox,CY+oy);
+        burst++;
+      }
+    }
+    for(let i=particles.length-1;i>=0;i--){
+      particles[i].upd();
+      if(particles[i].dead)particles.splice(i,1);
+      else particles[i].draw();
+    }
+  }
+
+  // HUD
+  if(state!=='pre'&&(state!=='drawing'||progress>50)){
+    const al=.4+.3*Math.sin(t*2);
+    ctx.font='14px sans-serif';ctx.textAlign='right';ctx.textBaseline='bottom';
+    ctx.fillStyle=`rgba(200,200,200,${al})`;
+    ctx.fillText('R 重新播放  |  ESC 退出',W-20,H-15);
+  }
+
+  requestAnimationFrame(loop);
+}
+
+// ========== 快捷键 ==========
+document.addEventListener('keydown',e=>{
+  if(e.key==='r'||e.key==='R'){
+    particles.length=0;trailDust.length=0;embers.length=0;
+    state='pre';progress=0;burst=0;
+    hbStart=0;fwStart=0;heartDoneTime=0;
+    initPre();
+  }
+  if(e.key==='Escape')window.close();
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
