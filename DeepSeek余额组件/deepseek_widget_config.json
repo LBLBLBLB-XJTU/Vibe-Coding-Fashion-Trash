@@ -1,0 +1,19 @@
+{
+  "api_key": "sk-496d66e5f17f467d8ea0dc256a15647b",
+  "window_position": "bottom-right",
+  "window_x": null,
+  "window_y": null,
+  "window_width": 280,
+  "window_height": 200,
+  "transparency": 0.9,
+  "refresh_interval": 60,
+  "always_on_top": true,
+  "theme": "dark",
+  "show_balance_only": false,
+  "balance_history": [
+    {
+      "d": "2026-05-14",
+      "t": 27.68
+    }
+  ]
+}
